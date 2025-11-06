@@ -80,7 +80,7 @@ const verifyFirebaseToken = async (req, res, next) => {
  * @description Root endpoint.
  */
 app.get("/", (req, res) => {
-  res.send("✅ VERCEL DEPLOYMENT SUCCESSFUL - CORS FIX IS LIVE!");
+  res.send("✅ VERCEL DEPLOYMENT SUCCESSFUL - CORS2 FIX IS LIVE!");
 });
 
 /**
