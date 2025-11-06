@@ -53,6 +53,14 @@ const oauth2Client = new google.auth.OAuth2(
 
 // --- Middleware ---
 const verifyFirebaseToken = async (req, res, next) => {
+  
+  // 💡 --- THIS IS THE FIX --- 💡
+  // Allow OPTIONS requests to pass through for CORS preflight.
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  // 💡 --- END OF FIX --- 💡
+
   if (!auth) {
     console.error("verifyFirebaseToken failed: Firebase Auth is not initialized.");
     return res.status(500).send("Server configuration error.");
@@ -247,7 +255,7 @@ app.get("/api/sync-all-users", async (req, res) => {
       });
     }
 
-    res.status(200).send(`Sync triggered for ${uniqueUserIds.length} users.`);
+    res.status(2200).send(`Sync triggered for ${uniqueUserIds.length} users.`);
 
   } catch (error) {
     console.error("Cron job failed:", error);
