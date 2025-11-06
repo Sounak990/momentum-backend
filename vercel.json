@@ -11,11 +11,5 @@
       "src": "/(.*)",
       "dest": "index.js"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/sync-all-users",
-      "schedule": "0 * * * *"
-    }
   ]
 }
