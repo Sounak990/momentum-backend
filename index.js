@@ -13,6 +13,7 @@ const app = express();
 const corsOptions = {
   origin: [
     "http://localhost:3000",
+    "https://my-habit-tracker-ca41a.web.app"
     // 💡 Add your DEPLOYED frontend URL here when you have one
     // "https://your-momentum-frontend.vercel.app" 
   ],
