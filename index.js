@@ -80,7 +80,7 @@ const verifyFirebaseToken = async (req, res, next) => {
  * @description Root endpoint.
  */
 app.get("/", (req, res) => {
-  res.send("✅ Momentum Backend is Live!");
+  res.send("✅ VERCEL DEPLOYMENT SUCCESSFUL - CORS FIX IS LIVE!");
 });
 
 /**
