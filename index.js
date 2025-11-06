@@ -8,14 +8,12 @@ import cors from "cors";
 dotenv.config();
 const app = express();
 
-// ✅ 1. FIX: CORS Configuration
+// ✅ 1. CORS Configuration
 // This allows your React app (on localhost) to talk to this backend (on Vercel)
 const corsOptions = {
   origin: [
     "http://localhost:3000",
     "https://my-habit-tracker-ca41a.web.app"
-    // 💡 Add your DEPLOYED frontend URL here when you have one
-    // "https://your-momentum-frontend.vercel.app" 
   ],
   optionsSuccessStatus: 200,
 };
@@ -23,27 +21,29 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 // --- Firebase Admin Setup ---
-if (!admin.apps.length) {
-  try {
+let db, auth;
+try {
+  if (!admin.apps.length) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
-  } catch (e) {
-    console.error("Failed to initialize Firebase Admin:", e.message);
-    console.log("Make sure FIREBASE_SERVICE_ACCOUNT env variable is set correctly.");
   }
+  db = admin.firestore();
+  auth = admin.auth(); 
+  console.log("✅ Firebase Admin initialized successfully.");
+} catch (e) {
+  console.error("❌ CRITICAL ERROR: Failed to initialize Firebase Admin:", e.message);
+  console.log("Make sure FIREBASE_SERVICE_ACCOUNT env variable is set correctly.");
 }
-const db = admin.firestore();
-const auth = admin.auth(); // <-- We need this to verify users
 
 // --- Google OAuth2 Setup ---
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-// ✅ 2. FIX: Correct Vercel URL
-// This MUST match the URL in your App.js and your Google Cloud Console
-const REDIRECT_URI = "https://momentum-backend-lm62x1bnm-sounak990s-projects.vercel.app/api/callback";
+// ✅ 2. THE CRITICAL FIX
+// This URL MUST match your LIVE Vercel project
+const REDIRECT_URI = "https://momentum-backend-km1qig2ta-sounak990s-projects.vercel.app/api/callback";
 
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
@@ -52,12 +52,12 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 // --- Middleware ---
-
-/**
- * @description Verifies the Firebase ID token sent from the frontend.
- * This middleware protects your endpoints.
- */
 const verifyFirebaseToken = async (req, res, next) => {
+  if (!auth) {
+    console.error("verifyFirebaseToken failed: Firebase Auth is not initialized.");
+    return res.status(500).send("Server configuration error.");
+  }
+  
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(403).send("Unauthorized: No token provided.");
@@ -66,7 +66,7 @@ const verifyFirebaseToken = async (req, res, next) => {
   const idToken = authHeader.split("Bearer ")[1];
   try {
     const decodedToken = await auth.verifyIdToken(idToken);
-    req.uid = decodedToken.uid; // Attach user's UID to the request
+    req.uid = decodedToken.uid; 
     next();
   } catch (error) {
     console.error("Error verifying token:", error);
@@ -75,52 +75,41 @@ const verifyFirebaseToken = async (req, res, next) => {
 };
 
 // --- API Endpoints ---
-
-/**
- * @description Root endpoint.
- */
 app.get("/", (req, res) => {
-  res.send("✅ VERCEL DEPLOYMENT SUCCESSFUL - CORS2 FIX IS LIVE!");
+  res.send("✅ VERCEL DEPLOYMENT SUCCESSFUL - CORS FIX IS LIVE!");
 });
 
-/**
- * @description Health check endpoint.
- */
 app.get("/api/ping", (req, res) => {
   res.send("Server running fine ✅");
 });
 
-/**
- * @description [SECURE] Gets a Google Auth URL for the *specific user*
- * who is making the request. This is called by your App.js.
- */
 app.get("/api/get-auth-url", verifyFirebaseToken, (req, res) => {
   const scopes = ["https://www.googleapis.com/auth/calendar"];
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: scopes,
-    state: req.uid, // ✅ 3. FIX: Pass the user's Firebase UID as the 'state'
+    state: req.uid, 
   });
   res.json({ authUrl: url });
 });
 
-/**
- * @description Handle Google callback after user grants permission.
- */
 app.get("/api/callback", async (req, res) => {
   const code = req.query.code;
-  const uid = req.query.state; // ✅ 4. FIX: Get the UID back from the 'state'
+  const uid = req.query.state; 
 
   if (!code) return res.status(400).send("Missing code.");
   if (!uid) return res.status(400).send("Missing user state.");
+  
+  if (!db) {
+    console.error("/api/callback failed: Firebase Firestore is not initialized.");
+    return res.status(500).send("Server configuration error.");
+  }
 
   try {
-    // Get tokens from Google
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    // Get the user's Google email to display in the frontend
     const people = google.people({ version: "v1", auth: oauth2Client });
     const profile = await people.people.get({
       resourceName: "people/me",
@@ -128,21 +117,19 @@ app.get("/api/callback", async (req, res) => {
     });
     const userEmail = profile.data.emailAddresses?.[0]?.value || "Google User";
 
-    // ✅ 5. FIX: Save tokens to the *correct* path App.js expects
     const integrationRef = db
       .doc(`users/${uid}/settings/integrations`);
 
     await integrationRef.set({
-      googleCalendar: { // <-- Save under the 'googleCalendar' map
+      googleCalendar: { 
         email: userEmail,
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expiry_date: tokens.expiry_date,
         created_at: admin.firestore.FieldValue.serverTimestamp(),
       }
-    }, { merge: true }); // Use {merge: true} to not overwrite other integrations
+    }, { merge: true }); 
 
-    // Redirect user back to the app's settings page
     res.redirect("http://localhost:3000/settings?google-connected=true");
   
   } catch (err) {
@@ -203,8 +190,6 @@ app.post("/api/sync-calendar", async (req, res) => {
       };
 
       try {
-        // Use 'insert' which will fail if the ID exists.
-        // This prevents creating duplicate events every hour.
         await calendar.events.insert({
           calendarId: "primary",
           resource: event,
@@ -213,7 +198,6 @@ app.post("/api/sync-calendar", async (req, res) => {
       } catch (e) {
         if (e.code === 409) {
           // Event already exists, which is fine. We can just ignore it.
-          // In a more advanced app, you might update it here.
         } else {
           console.error(`Error syncing task ${task.id}:`, e.message);
         }
